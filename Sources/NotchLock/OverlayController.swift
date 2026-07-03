@@ -13,6 +13,11 @@ final class OverlayController {
     private let notchMaxX: CGFloat
     private let activationRefY: CGFloat
 
+    /// Whether the overlay is currently interactive (only while over the bead).
+    private var interactive = false
+    /// Whether we're currently showing a hand cursor (so we can reset it).
+    private var showingHand = false
+
     init(screen: NSScreen, style: ChainStyle) {
         self.style = style
         let geo = OverlayController.computeGeometry(for: screen)
@@ -57,14 +62,42 @@ final class OverlayController {
         CGPoint(x: global.x - window.frame.minX, y: global.y - window.frame.minY)
     }
 
-    /// Update engagement + the drop position from the cursor's location.
+    /// Update engagement + the drop position from the cursor's location, and make
+    /// the overlay interactive ONLY while the cursor is over the bead (so it can
+    /// be grabbed) — click-through everywhere else. Also drives the hand cursor.
     func handleMouseMoved(globalPoint p: CGPoint) {
         let v = toView(p)
         chainView.cursorXView = v.x           // drop the cord in line with the pointer
         let clampedX = min(max(v.x, notchMinX), notchMaxX)
         let d = hypot(v.x - clampedX, v.y - activationRefY)
         chainView.setEngaged(d < CGFloat(style.activationRadius))
+
+        // Is the cursor over the (visible) bead?
+        let bead = chainView.beadPosition
+        let overBead = chainView.emergenceValue > 0.5
+            && hypot(v.x - bead.x, v.y - bead.y) <= CGFloat(style.grabRadius) + 6
+
+        // Interactive while over the bead OR mid-pull; click-through otherwise.
+        let grabbed = chainView.isGrabbed
+        let wantInteractive = overBead || grabbed
+        if wantInteractive != interactive {
+            interactive = wantInteractive
+            window.ignoresMouseEvents = !wantInteractive
+        }
+
+        // Hand cursor only over the pull; reset once when leaving so it never
+        // sticks over the background (which owns its own cursor when clicked-through).
+        if grabbed {
+            NSCursor.closedHand.set(); showingHand = true
+        } else if overBead {
+            NSCursor.openHand.set(); showingHand = true
+        } else if showingHand {
+            NSCursor.arrow.set(); showingHand = false
+        }
     }
+
+    /// Exposed for tests: true when the overlay currently captures clicks.
+    var isInteractive: Bool { !window.ignoresMouseEvents }
 
     /// Bead position in global screen coords (for hit-testing a grab).
     func beadGlobalPosition() -> CGPoint {
@@ -86,13 +119,6 @@ final class OverlayController {
 
     func notchHotZone() -> CGRect { geometry.notchRect.insetBy(dx: -14, dy: -12) }
     func isInNotchHotZone(globalPoint p: CGPoint) -> Bool { notchHotZone().contains(p) }
-
-    /// A larger zone around the hanging cord where a click may be a grab, so we
-    /// only show the grab cursor / try grabs there.
-    func isNearCord(globalPoint p: CGPoint) -> Bool {
-        let bead = beadGlobalPosition()
-        return hypot(p.x - bead.x, p.y - bead.y) < CGFloat(style.grabRadius) + 10
-    }
 
     // MARK: - Geometry
 

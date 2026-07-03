@@ -106,7 +106,7 @@ while it's out, and tucks away (back to **0 % CPU**) when you leave.
 | 🪝 **Lamp‑cord physics** | A pinned Verlet rope drops, hangs and swings under real gravity — grab, stretch, release, recoil, with a playful ambient sway. |
 | 🔒 **Pull to lock** | Pull past the threshold and let go → NotchLock locks your screen **instantly** (same call as macOS *Lock Screen*). Bring the bead back up before releasing to cancel. |
 | 🖐️ **Feels physical** | The cord drops in line with your cursor, shows an open‑hand on hover and a closed‑hand while you pull. |
-| 🫥 **Truly invisible** | Agent app: **no Dock icon, no status‑bar icon**. A fully click‑through overlay — it never blocks a single click underneath. |
+| 🫥 **Truly invisible** | Agent app: **no Dock icon, no status‑bar icon**. The overlay is **fully click‑through** — only the small bead is interactive, so it never blocks a click anywhere else. |
 | 🪫 **0 % idle CPU** | The animation loop sleeps the instant the cord is tucked away. Nothing moving, nothing burning. |
 | 🔁 **Survives reboot** | Registers a `RunAtLoad` LaunchAgent (self‑healing) so it's back after every restart or login. |
 | 🖱️ **Zero permissions** | Uses global event monitors — no Accessibility or Screen‑Recording grants required. |

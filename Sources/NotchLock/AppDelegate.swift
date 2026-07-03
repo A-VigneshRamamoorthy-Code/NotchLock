@@ -65,24 +65,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard controller != nil else { return }
         let mode = (ProcessInfo.processInfo.environment["NOTCHLOCK_SELFDRIVE"] ?? "1").lowercased()
         if mode == "align" { runAlignProbe(); return }
-        if mode == "hittest" { runHitTestProbe(); return }
+        if mode == "interactive" { runInteractiveProbe(); return }
         runSelfDrive(cancel: mode == "cancel")
     }
 
-    /// Issue #3 probe: confirm only the bead is interactive (hitTest returns the
-    /// view there) and everywhere else is click-through (returns nil).
-    private func runHitTestProbe() {
+    /// Click-through probe: the overlay must capture clicks ONLY while the cursor
+    /// is over the bead, and be click-through (ignoresMouseEvents) everywhere else.
+    private func runInteractiveProbe() {
         guard let c = controller else { return }
+        // Engage first so the cord drops out, then hover the bead.
         handleMove(c.beadGlobalPosition())
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
             guard let self, let c = self.controller else { return }
-            let v = c.chainView
-            let bead = v.beadPosition                              // view coords
-            let atBead = v.hitTest(bead) != nil
-            let farRight = v.hitTest(CGPoint(x: bead.x + 300, y: bead.y)) != nil
-            let farUp = v.hitTest(CGPoint(x: bead.x, y: bead.y + 260)) != nil
-            NSLog("NotchLock[hittest] bead=%@ farRight=%@ farUp=%@ (want: true,false,false)",
-                  atBead ? "true" : "false", farRight ? "true" : "false", farUp ? "true" : "false")
+            let beadG = c.beadGlobalPosition()
+            self.handleMove(beadG)          // exactly on the bead
+            let onBead = c.isInteractive
+            NSLog("NotchLock[interactive] emergence=%.2f beadGlobal=%@ onBead=%@",
+                  c.chainView.emergenceValue, NSStringFromPoint(beadG), onBead ? "true" : "false")
+            // Move well away from the bead (down into the desktop/app area).
+            let away = CGPoint(x: beadG.x + 260, y: beadG.y - 200)
+            self.handleMove(away)
+            let offBead = c.isInteractive
+            NSLog("NotchLock[interactive] onBead=%@ offBead=%@ (want: true, false)",
+                  onBead ? "true" : "false", offBead ? "true" : "false")
+            NSLog("NotchLock[interactive] background clickable off-bead: %@", offBead ? "NO" : "YES")
         }
     }
 
@@ -173,10 +179,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Mouse handling
 
     private func handleMove(_ p: CGPoint) {
+        // Controller updates engagement, the drop position, the click-through
+        // hotspot, and the hand cursor — all gated to the bead.
         controller?.handleMouseMoved(globalPoint: p)
-        if controller?.isNearCord(globalPoint: p) == true {
-            (dragging ? NSCursor.closedHand : NSCursor.openHand).set()
-        }
     }
 
     private func handleLeftDown(_ p: CGPoint) {

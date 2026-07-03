@@ -31,7 +31,6 @@ final class ChainView: NSView {
     private var link: CADisplayLink?
     private var lastTime: CFTimeInterval = 0
     private var lastDirty: CGRect = .null
-    private var tracking: NSTrackingArea?
 
     init(frame: NSRect, notchMinX: CGFloat, notchMaxX: CGFloat, shoulderY: CGFloat, style: ChainStyle) {
         self.style = style
@@ -62,36 +61,6 @@ final class ChainView: NSView {
         }
     }
 
-    // MARK: - Cursor (hand on hover, closed hand while pulling)
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let tracking { removeTrackingArea(tracking) }
-        let t = NSTrackingArea(rect: bounds,
-                               options: [.activeAlways, .cursorUpdate, .mouseEnteredAndExited],
-                               owner: self, userInfo: nil)
-        addTrackingArea(t)
-        tracking = t
-    }
-
-    private func applyHandCursor() {
-        (engine.isGrabbed ? NSCursor.closedHand : NSCursor.openHand).set()
-    }
-    override func cursorUpdate(with event: NSEvent) { applyHandCursor() }
-    override func mouseEntered(with event: NSEvent) { applyHandCursor() }
-
-    /// Only the visible bead is interactive; everywhere else returns nil so the
-    /// overlay is click-through and never blocks the apps underneath.
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        guard engine.emergenceValue > 0.5 else { return nil }
-        let local = convert(point, from: superview)
-        let bead = engine.beadPosition
-        // A little slack when idle; a wider capture while pulling so the closed
-        // hand stays put as the bead trails the cursor.
-        let r = CGFloat(style.grabRadius) + (engine.isGrabbed ? 140 : 12)
-        return hypot(local.x - bead.x, local.y - bead.y) <= r ? self : nil
-    }
-
     func resume() {
         guard let link else { return }
         if link.isPaused {
@@ -109,13 +78,12 @@ final class ChainView: NSView {
     // MARK: - Interaction (coords are in this view's space)
 
     var beadPosition: CGPoint { engine.beadPosition }
+    var emergenceValue: Double { engine.emergenceValue }
 
     @discardableResult
     func tryGrab(at p: CGPoint) -> Bool {
         resume()
-        let ok = engine.grab(at: p)
-        if ok { applyHandCursor() }
-        return ok
+        return engine.grab(at: p)
     }
 
     func drag(to p: CGPoint) {
