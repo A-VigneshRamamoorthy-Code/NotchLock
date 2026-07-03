@@ -32,11 +32,12 @@ final class OverlayController {
         self.notchMaxX = maxX
         self.activationRefY = geo.shoulder.y - frame.minY
 
-        // Hang from the notch centre, anchored just above the visible top edge so
-        // the cord is clipped flush where it enters the notch.
-        let shoulder = CGPoint(x: (minX + maxX) / 2, y: frame.height + 16)
+        // Anchor just above the visible top edge so the cord is clipped flush
+        // where it enters the notch; its x now follows the cursor (see ChainView).
+        let shoulderY = frame.height + 16
         self.chainView = ChainView(frame: NSRect(origin: .zero, size: frame.size),
-                                   shoulder: shoulder, style: style)
+                                   notchMinX: minX, notchMaxX: maxX,
+                                   shoulderY: shoulderY, style: style)
         window.contentView = chainView
     }
 
@@ -56,9 +57,10 @@ final class OverlayController {
         CGPoint(x: global.x - window.frame.minX, y: global.y - window.frame.minY)
     }
 
-    /// Update engagement from the cursor's proximity to the notch span.
+    /// Update engagement + the drop position from the cursor's location.
     func handleMouseMoved(globalPoint p: CGPoint) {
         let v = toView(p)
+        chainView.cursorXView = v.x           // drop the cord in line with the pointer
         let clampedX = min(max(v.x, notchMinX), notchMaxX)
         let d = hypot(v.x - clampedX, v.y - activationRefY)
         chainView.setEngaged(d < CGFloat(style.activationRadius))

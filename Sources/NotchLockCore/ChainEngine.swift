@@ -51,7 +51,6 @@ public struct ChainEngine {
     private var tipTarget: CGPoint?
     private var restLenCur: Double
     private var restLenVel: Double = 0
-    private var maxPullDepth: Double = 0
 
     /// How far the pinned base is lifted above the notch while fully tucked, so
     /// the whole hanging rope clears the visible top edge.
@@ -98,6 +97,13 @@ public struct ChainEngine {
     /// How far (points) the bead is currently pulled below its rest position.
     public var currentPullDepth: Double { max(0, Double(restTipY - state.tip.y)) }
 
+    /// How far the user's HAND (drag target) is below rest. Used to decide the
+    /// lock: bringing the bead back up before releasing lowers this, so it cancels.
+    private var targetPullDepth: Double {
+        guard let t = tipTarget else { return 0 }
+        return max(0, Double(restTipY - t.y))
+    }
+
     public var isGrabbed: Bool { grabbed }
     public var emergenceValue: Double { emergence }
 
@@ -113,7 +119,6 @@ public struct ChainEngine {
         guard d <= style.grabRadius else { return false }
         grabbed = true
         tipTarget = p
-        maxPullDepth = 0
         return true
     }
 
@@ -124,15 +129,15 @@ public struct ChainEngine {
     }
 
     /// Release the bead. The rope length snaps back to rest, so it recoils and
-    /// swings. Returns `true` when the maximum pull passed the arming threshold
-    /// (i.e. the caller should lock the screen).
+    /// swings. Returns `true` only when the cord is STILL pulled past the arming
+    /// threshold at the moment of release — so pulling down and then bringing it
+    /// back up before letting go cancels the lock.
     @discardableResult
     public mutating func release() -> Bool {
         guard grabbed else { return false }
-        let triggered = maxPullDepth >= style.pullThreshold
+        let triggered = targetPullDepth >= style.pullThreshold
         grabbed = false
         tipTarget = nil
-        maxPullDepth = 0
         return triggered
     }
 
@@ -240,8 +245,10 @@ public struct ChainEngine {
         let prev = nodes[n - 2]
         state.tipRotation = CGFloat(atan2(Double(tip.y - prev.y), Double(tip.x - prev.x)))
         state.grabbed = grabbed
-        if grabbed { maxPullDepth = max(maxPullDepth, currentPullDepth) }
-        state.armed = grabbed && currentPullDepth >= style.pullThreshold
+        // Armed reflects the user's HAND position (immediate feedback): pull the
+        // hand past the threshold → armed (red); bring it back up → not armed, so
+        // releasing there won't lock.
+        state.armed = grabbed && targetPullDepth >= style.pullThreshold
     }
 
     /// True when the cord is essentially motionless (all node + length + emergence

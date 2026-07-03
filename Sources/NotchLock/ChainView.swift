@@ -4,9 +4,15 @@ import NotchLockCore
 
 /// Draws the pull-cord via the engine each frame. The display link runs only
 /// while the cord is moving or being held; once it settles (hanging still, or
-/// tucked away) the link pauses, dropping CPU to ~0. The last frame stays on
-/// screen while paused, so a still cord remains visible. Only the cord's
-/// bounding box is invalidated each frame.
+/// tucked away) the link pauses, dropping CPU to ~0.
+///
+/// Two behaviours live here beyond drawing:
+///  • The anchor (where the cord drops from) slides along the notch to sit under
+///    the cursor's x, so the string appears in line with the pointer — not always
+///    centred. It freezes while the cord is held.
+///  • Only the small, moving bead is interactive (`hitTest`), so the hand cursor
+///    shows on hover / closed-hand while pulling, while every other click passes
+///    straight through the overlay.
 final class ChainView: NSView {
     private(set) var engine: ChainEngine
     var style: ChainStyle {
@@ -14,13 +20,28 @@ final class ChainView: NSView {
     }
     private(set) var engaged = false
 
+    // Notch span the anchor may slide along + the anchor's fixed y (view coords).
+    private let notchMinX: CGFloat
+    private let notchMaxX: CGFloat
+    private let shoulderY: CGFloat
+    private var shoulderX: CGFloat
+    /// Latest cursor x in view coords — drives where the cord drops from.
+    var cursorXView: CGFloat
+
     private var link: CADisplayLink?
     private var lastTime: CFTimeInterval = 0
     private var lastDirty: CGRect = .null
+    private var tracking: NSTrackingArea?
 
-    init(frame: NSRect, shoulder: CGPoint, style: ChainStyle) {
+    init(frame: NSRect, notchMinX: CGFloat, notchMaxX: CGFloat, shoulderY: CGFloat, style: ChainStyle) {
         self.style = style
-        self.engine = ChainEngine(shoulder: shoulder, style: style)
+        self.notchMinX = notchMinX
+        self.notchMaxX = notchMaxX
+        self.shoulderY = shoulderY
+        let midX = (notchMinX + notchMaxX) / 2
+        self.shoulderX = midX
+        self.cursorXView = midX
+        self.engine = ChainEngine(shoulder: CGPoint(x: midX, y: shoulderY), style: style)
         super.init(frame: frame)
         clipsToBounds = true   // clip the cord flush at the top edge / into the notch
     }
@@ -41,6 +62,36 @@ final class ChainView: NSView {
         }
     }
 
+    // MARK: - Cursor (hand on hover, closed hand while pulling)
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let t = NSTrackingArea(rect: bounds,
+                               options: [.activeAlways, .cursorUpdate, .mouseEnteredAndExited],
+                               owner: self, userInfo: nil)
+        addTrackingArea(t)
+        tracking = t
+    }
+
+    private func applyHandCursor() {
+        (engine.isGrabbed ? NSCursor.closedHand : NSCursor.openHand).set()
+    }
+    override func cursorUpdate(with event: NSEvent) { applyHandCursor() }
+    override func mouseEntered(with event: NSEvent) { applyHandCursor() }
+
+    /// Only the visible bead is interactive; everywhere else returns nil so the
+    /// overlay is click-through and never blocks the apps underneath.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard engine.emergenceValue > 0.5 else { return nil }
+        let local = convert(point, from: superview)
+        let bead = engine.beadPosition
+        // A little slack when idle; a wider capture while pulling so the closed
+        // hand stays put as the bead trails the cursor.
+        let r = CGFloat(style.grabRadius) + (engine.isGrabbed ? 140 : 12)
+        return hypot(local.x - bead.x, local.y - bead.y) <= r ? self : nil
+    }
+
     func resume() {
         guard let link else { return }
         if link.isPaused {
@@ -49,9 +100,6 @@ final class ChainView: NSView {
         }
     }
 
-    /// Update engagement. Resumes the loop when entering/leaving the zone or when
-    /// moving within it (so grabbing stays responsive); a still, disengaged cord
-    /// stays paused → 0% CPU.
     func setEngaged(_ value: Bool) {
         let changed = value != engaged
         engaged = value
@@ -65,7 +113,9 @@ final class ChainView: NSView {
     @discardableResult
     func tryGrab(at p: CGPoint) -> Bool {
         resume()
-        return engine.grab(at: p)
+        let ok = engine.grab(at: p)
+        if ok { applyHandCursor() }
+        return ok
     }
 
     func drag(to p: CGPoint) {
@@ -87,6 +137,19 @@ final class ChainView: NSView {
         let now = link.timestamp
         let dt = lastTime > 0 ? now - lastTime : 1.0 / 60.0
         lastTime = now
+
+        // Anchor the cord to the notch point nearest the cursor's x, so it drops
+        // in line with the pointer. Snap before it emerges (so it appears under
+        // the cursor), ease afterwards, and freeze while the user holds it.
+        if !engine.isGrabbed {
+            let desired = min(max(cursorXView, notchMinX), notchMaxX)
+            if engine.emergenceValue < 0.05 {
+                shoulderX = desired
+            } else {
+                shoulderX += (desired - shoulderX) * min(1, CGFloat(dt) * 11)
+            }
+            engine.shoulder = CGPoint(x: shoulderX, y: shoulderY)
+        }
 
         engine.update(dt: dt, engaged: engaged)
         let current = ChainRenderer.bounds(of: engine.state, style: style)

@@ -67,30 +67,33 @@ enum DemoRecorder {
         var styleNow = CordStyle.brass
 
         // Frame timeline (30fps).
-        let F_INTRO = 45,   F_APPROACH = 78,  F_MENU = 168, F_SETTLE = 198
-        let F_GRAB = 208,   F_PULL = 250,     F_RELEASE = 254, F_SWING = 300
-        let F_LOCKING = 314, F_LOCKED = 316,  F_END = 420
-        let switchFrame = 150            // menu selection commits → cord becomes rope
+        let F_INTRO = 45,   F_APPROACH = 82,  F_MENU = 172, F_SETTLE = 202
+        let F_GRAB = 212,   F_PULL = 250,     F_RELEASE = 258, F_SWING = 268
+        let F_LOCKING = 270, F_LOCKED = 272,  F_END = 372
+        let switchFrame = 152            // menu selection commits → cord becomes rope
         let ropeStyle = CordStyle.rope
+        // Notch span the cord can drop from (matches the drawn notch, inset a bit).
+        let notchMin = cx - 88, notchMax = cx + 88
+        let shoulderY = CGFloat(H) + 16
 
         var grabbed = false, released = false
         var grabBead = CGPoint.zero
 
         for f in 0..<F_END {
             // --- Build this frame's script ---
-            var fr = Frame(cursor: CGPoint(x: cx + 150, y: 430), caption: nil, phase: .intro)
+            var fr = Frame(cursor: CGPoint(x: cx - 150, y: 430), caption: nil, phase: .intro)
 
             if f < F_INTRO {
                 fr.phase = .intro; fr.introT = Double(f) / Double(fps)
-                fr.cursor = CGPoint(x: cx + 150, y: 430)
+                fr.cursor = CGPoint(x: cx - 150, y: 430)
             } else if f < F_APPROACH {
-                fr.phase = .approach; fr.caption = "Bring your cursor to the notch"
+                fr.phase = .approach; fr.caption = "The cord drops in line with your cursor"
                 let u = smooth(Double(f - F_INTRO) / Double(F_APPROACH - F_INTRO))
-                fr.cursor = lerp(CGPoint(x: cx + 150, y: 430), CGPoint(x: cx + 20, y: 700), u)
+                // Approach from the LEFT so the cord drops off-centre under the pointer.
+                fr.cursor = lerp(CGPoint(x: cx - 150, y: 430), CGPoint(x: cx - 96, y: 700), u)
             } else if f < F_MENU {
                 fr.phase = .menu; fr.caption = "Right‑click the notch to pick a style"
                 fr.showMenu = true
-                // Cursor glides down the menu rows and settles on Thick Rope (row 1).
                 let mu = Double(f - F_APPROACH) / Double(F_MENU - F_APPROACH)
                 let rows = 4
                 let hi = min(rows - 1, Int(mu * 5.2))
@@ -99,7 +102,7 @@ enum DemoRecorder {
                 if f >= switchFrame { fr.menuHighlight = 1 }
             } else if f < F_SETTLE {
                 fr.phase = .settle; fr.caption = "Thick Rope selected"
-                fr.cursor = CGPoint(x: cx + 40, y: 560)
+                fr.cursor = CGPoint(x: cx - 92, y: 560)
             } else if f < F_GRAB {
                 fr.phase = .grab; fr.caption = "Grab the pull‑cord"
                 fr.closedHand = true
@@ -112,13 +115,13 @@ enum DemoRecorder {
                 fr.phase = .pull; fr.caption = "Pull it down…"; fr.closedHand = true
                 fr.cursor = CGPoint(x: grabBead.x + 8, y: grabBead.y - 210)
             } else if f < F_SWING {
-                fr.phase = .release; fr.caption = "…and let go!"
+                fr.phase = .release; fr.caption = "…let go — locks instantly!"
                 let u = smooth(Double(f - F_RELEASE) / Double(F_SWING - F_RELEASE))
                 fr.cursor = lerp(CGPoint(x: grabBead.x + 8, y: grabBead.y - 210),
-                                 CGPoint(x: cx + 190, y: 470), u)
+                                 CGPoint(x: grabBead.x + 70, y: grabBead.y - 120), u)
             } else if f < F_LOCKING {
-                fr.phase = .locking; fr.caption = "Locking your Mac…"
-                fr.cursor = CGPoint(x: cx + 190, y: 470); fr.lockT = Double(f - F_SWING) / Double(fps)
+                fr.phase = .locking; fr.caption = nil
+                fr.cursor = CGPoint(x: grabBead.x + 70, y: grabBead.y - 120); fr.lockT = Double(f - F_SWING) / Double(fps)
             } else {
                 fr.phase = .locked; fr.lockT = Double(f - F_LOCKED) / Double(fps)
             }
@@ -132,6 +135,11 @@ enum DemoRecorder {
 
             // --- Drive the real engine like the app's handlers ---
             let engaged = fr.phase != .intro && fr.phase != .locking && fr.phase != .locked
+            // Issue #1: the cord drops from the notch point nearest the cursor's x.
+            if !grabbed {
+                let sx = min(max(fr.cursor.x, notchMin), notchMax)
+                engine.shoulder = CGPoint(x: sx, y: shoulderY)
+            }
             if fr.phase == .grab && !grabbed {
                 _ = engine.grab(at: engine.beadPosition)
                 grabbed = true

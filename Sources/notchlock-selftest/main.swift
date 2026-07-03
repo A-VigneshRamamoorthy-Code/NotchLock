@@ -137,6 +137,20 @@ group("ChainEngine — pull threshold fires once") {
     }
     check(shallow.state.armed == false, "not armed for a shallow pull")
     check(shallow.release() == false, "shallow pull does not lock")
+
+    // Issue #4: pull PAST the threshold, then bring the hand back UP to a shallow
+    // (non-pulled) position before releasing → must NOT lock.
+    var cancel = makeEngine()
+    run(&cancel, engaged: true, seconds: 1.0)
+    check(cancel.grab(at: cancel.beadPosition), "grab for cancel case")
+    let deepY = shoulder.y - CGFloat(style.restLength + style.pullThreshold + 40)
+    for _ in 0..<50 { cancel.drag(to: CGPoint(x: shoulder.x, y: deepY)); cancel.update(dt: dt, engaged: true) }
+    check(cancel.state.armed, "armed while pulled deep")
+    // Bring the hand back up near rest (not pulled).
+    let upY = shoulder.y - CGFloat(style.restLength + 20)
+    for _ in 0..<50 { cancel.drag(to: CGPoint(x: shoulder.x, y: upY)); cancel.update(dt: dt, engaged: true) }
+    check(cancel.state.armed == false, "disarms when the hand is brought back up")
+    check(cancel.release() == false, "pulled then brought back up → does NOT lock")
 }
 
 group("ChainEngine — stability") {

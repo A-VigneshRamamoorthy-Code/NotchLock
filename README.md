@@ -51,8 +51,8 @@ No Dock icon. No menu‑bar icon. **0 % CPU** when it's just hanging there. And 
 <td width="33%" valign="top">
 
 ### 1 · Approach
-Move your cursor up to the **notch**. The cord drops into view and hangs,
-swaying gently under gravity.
+Move your cursor up to the **notch**. The cord **drops in line with your cursor**
+(not just the centre) and hangs, swaying gently under gravity.
 
 </td>
 <td width="33%" valign="top">
@@ -65,8 +65,8 @@ turns **red — armed**.
 <td width="33%" valign="top">
 
 ### 3 · Lock
-**Let go.** It recoils and swings, then a beat later your **Mac locks** with a
-sound. Lights out. 🌙
+**Let go while it's pulled** and your **Mac locks instantly** with a sound. Change
+your mind? Just bring the bead back up before releasing and nothing happens. 🌙
 
 </td>
 </tr>
@@ -104,7 +104,8 @@ while it's out, and tucks away (back to **0 % CPU**) when you leave.
 |---|---|
 | 🎨 **Four cord styles** | Brass bead, **thick rope**, ball chain, neon — switch anytime from the right‑click menu; your pick is remembered. |
 | 🪝 **Lamp‑cord physics** | A pinned Verlet rope drops, hangs and swings under real gravity — grab, stretch, release, recoil, with a playful ambient sway. |
-| 🔒 **Pull to lock** | Pull past the threshold and NotchLock locks your screen (via the same call as macOS *Lock Screen*), with grab + lock sounds. |
+| 🔒 **Pull to lock** | Pull past the threshold and let go → NotchLock locks your screen **instantly** (same call as macOS *Lock Screen*). Bring the bead back up before releasing to cancel. |
+| 🖐️ **Feels physical** | The cord drops in line with your cursor, shows an open‑hand on hover and a closed‑hand while you pull. |
 | 🫥 **Truly invisible** | Agent app: **no Dock icon, no status‑bar icon**. A fully click‑through overlay — it never blocks a single click underneath. |
 | 🪫 **0 % idle CPU** | The animation loop sleeps the instant the cord is tucked away. Nothing moving, nothing burning. |
 | 🔁 **Survives reboot** | Registers a `RunAtLoad` LaunchAgent (self‑healing) so it's back after every restart or login. |

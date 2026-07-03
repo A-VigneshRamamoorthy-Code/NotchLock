@@ -1,9 +1,10 @@
 import AppKit
 
-/// A transparent, click-through panel that floats above the menu bar so the
-/// pull-cord can be drawn around the notch. It never accepts mouse events, so it
-/// can never interfere with the user's real interactions; grabs are detected via
-/// non-consuming global monitors in `AppDelegate`.
+/// A transparent panel that floats above the menu bar so the pull-cord can be
+/// drawn around the notch. It is click-through EVERYWHERE except the small,
+/// moving bead region: the content view's `hitTest` returns the view only over
+/// the visible bead (so the hand cursor sticks and a grab is captured), and
+/// `nil` everywhere else, letting all other clicks pass straight through.
 final class OverlayWindow: NSPanel {
     init(contentRect: NSRect) {
         super.init(contentRect: contentRect,
@@ -15,8 +16,10 @@ final class OverlayWindow: NSPanel {
         backgroundColor = .clear
         isOpaque = false
         hasShadow = false
-        // Fully click-through: the window never intercepts mouse events.
-        ignoresMouseEvents = true
+        // The window CAN receive events, but the content view's hitTest only
+        // claims the tiny bead circle — everywhere else passes through.
+        ignoresMouseEvents = false
+        acceptsMouseMovedEvents = true
         isMovable = false
         isReleasedWhenClosed = false
         hidesOnDeactivate = false

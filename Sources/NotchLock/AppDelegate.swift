@@ -62,32 +62,90 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// handlers the mouse monitors call, using the cord's actual on-screen
     /// position. Proves the whole controller→engine→lock chain end to end.
     private func scheduleSelfDrive() {
+        guard controller != nil else { return }
+        let mode = (ProcessInfo.processInfo.environment["NOTCHLOCK_SELFDRIVE"] ?? "1").lowercased()
+        if mode == "align" { runAlignProbe(); return }
+        if mode == "hittest" { runHitTestProbe(); return }
+        runSelfDrive(cancel: mode == "cancel")
+    }
+
+    /// Issue #3 probe: confirm only the bead is interactive (hitTest returns the
+    /// view there) and everywhere else is click-through (returns nil).
+    private func runHitTestProbe() {
+        guard let c = controller else { return }
+        handleMove(c.beadGlobalPosition())
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { [weak self] in
+            guard let self, let c = self.controller else { return }
+            let v = c.chainView
+            let bead = v.beadPosition                              // view coords
+            let atBead = v.hitTest(bead) != nil
+            let farRight = v.hitTest(CGPoint(x: bead.x + 300, y: bead.y)) != nil
+            let farUp = v.hitTest(CGPoint(x: bead.x, y: bead.y + 260)) != nil
+            NSLog("NotchLock[hittest] bead=%@ farRight=%@ farUp=%@ (want: true,false,false)",
+                  atBead ? "true" : "false", farRight ? "true" : "false", farUp ? "true" : "false")
+        }
+    }
+
+    /// Issue #1 probe: feed off-centre cursors and log where the cord drops from.
+    private func runAlignProbe() {
+        guard let c = controller else { return }
+        let zone = c.notchHotZone()
+        let leftX = zone.minX + 6, rightX = zone.maxX - 6, y = zone.midY
+        // Move far left, let it settle, log bead x; then far right.
+        handleMove(CGPoint(x: leftX, y: y))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            guard let self, let c = self.controller else { return }
+            let bl = c.beadGlobalPosition().x
+            NSLog("NotchLock[align] cursorX=%.0f (left)  beadX=%.0f", leftX, bl)
+            self.handleMove(CGPoint(x: rightX, y: y))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                let br = c.beadGlobalPosition().x
+                NSLog("NotchLock[align] cursorX=%.0f (right) beadX=%.0f", rightX, br)
+                NSLog("NotchLock[align] follows cursor: %@", br > bl + 40 ? "YES" : "NO")
+            }
+        }
+    }
+
+    private func runSelfDrive(cancel: Bool) {
         guard let controller else { return }
-        // 1) Engage: report a cursor right at the notch so the cord drops out.
         let notch = controller.beadGlobalPosition()
         handleMove(notch)
-        // 2) After it has fully emerged, grab the bead at its real position.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { [weak self] in
             guard let self, let c = self.controller else { return }
             let bead = c.beadGlobalPosition()
-            self.handleMove(bead)                 // keep engaged near the bead
-            self.handleLeftDown(bead)             // grab
-            // 3) Pull straight down past the threshold, then HOLD so the
-            // display-link-driven tip spring catches up to the deep target.
+            self.handleMove(bead)
+            self.handleLeftDown(bead)
             let depth: CGFloat = 210
-            let pullFrames = 26                   // ~1.05s pulling down
-            let holdFrames = 16                   // ~0.65s holding at the bottom
+            let pullFrames = 26
+            let holdFrames = 16
             for i in 1...(pullFrames + holdFrames) {
                 DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.04) {
                     let f = min(CGFloat(i) / CGFloat(pullFrames), 1)
-                    let y = bead.y - depth * f    // global bottom-left: down = −y
+                    let y = bead.y - depth * f
                     self.handleLeftDrag(CGPoint(x: bead.x, y: y))
                 }
             }
-            // 4) Release → snaps back and (DRYRUN) fires the lock.
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(pullFrames + holdFrames) * 0.04 + 0.1) {
-                self.handleLeftUp(CGPoint(x: bead.x, y: bead.y - depth))
-                NSLog("NotchLock[selfdrive] gesture complete (target pull depth ≈ %.0f pt)", Double(depth))
+            var t = Double(pullFrames + holdFrames) * 0.04
+            if cancel {
+                // Bring the hand back up near rest before releasing.
+                let upFrames = 20
+                for i in 1...upFrames {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + t + Double(i) * 0.04) {
+                        let f = CGFloat(i) / CGFloat(upFrames)
+                        let y = bead.y - depth * (1 - f)   // back toward rest
+                        self.handleLeftDrag(CGPoint(x: bead.x, y: y))
+                    }
+                }
+                t += Double(upFrames) * 0.04
+                DispatchQueue.main.asyncAfter(deadline: .now() + t + 0.1) {
+                    self.handleLeftUp(CGPoint(x: bead.x, y: bead.y))
+                    NSLog("NotchLock[selfdrive] CANCEL gesture complete (released near rest)")
+                }
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + t + 0.1) {
+                    self.handleLeftUp(CGPoint(x: bead.x, y: bead.y - depth))
+                    NSLog("NotchLock[selfdrive] FIRE gesture complete (released while pulled ≈ %.0f pt)", Double(depth))
+                }
             }
         }
     }
@@ -163,13 +221,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func triggerLockSequence() {
         guard !lockPending else { return }
         lockPending = true
-        LockController.playSound("Pop")   // the pull-cord "click"
+        LockController.playSound("Submarine")   // the lock chime
 
-        let delay = style.lockDelay
-        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, delay - 0.45)) {
-            LockController.playSound("Submarine")   // the lock sound
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+        // Lock (almost) immediately — a tiny delay just lets the release recoil
+        // begin and the sound start before the display cuts.
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, style.lockDelay)) { [weak self] in
             guard let self else { return }
             self.lockPending = false
             if self.dryRun {
