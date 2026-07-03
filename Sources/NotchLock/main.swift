@@ -22,6 +22,12 @@ if let idx = CommandLine.arguments.firstIndex(of: "--appicon") {
     let ok = PreviewRenderer.renderAppIcon(to: outPath)
     exit(ok ? 0 : 1)
 }
+if let idx = CommandLine.arguments.firstIndex(of: "--demo") {
+    let outDir = CommandLine.arguments.indices.contains(idx + 1)
+        ? CommandLine.arguments[idx + 1] : NSTemporaryDirectory() + "notchlock-demo"
+    DemoRecorder.record(to: outDir)
+    exit(0)
+}
 
 let delegate = AppDelegate()
 app.delegate = delegate
