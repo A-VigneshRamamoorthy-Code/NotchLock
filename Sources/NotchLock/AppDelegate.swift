@@ -78,17 +78,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
             guard let self, let c = self.controller else { return }
             let beadG = c.beadGlobalPosition()
-            self.handleMove(beadG)          // exactly on the bead
-            let onBead = c.isInteractive
-            NSLog("NotchLock[interactive] emergence=%.2f beadGlobal=%@ onBead=%@",
-                  c.chainView.emergenceValue, NSStringFromPoint(beadG), onBead ? "true" : "false")
-            // Move well away from the bead (down into the desktop/app area).
-            let away = CGPoint(x: beadG.x + 260, y: beadG.y - 200)
-            self.handleMove(away)
-            let offBead = c.isInteractive
-            NSLog("NotchLock[interactive] onBead=%@ offBead=%@ (want: true, false)",
-                  onBead ? "true" : "false", offBead ? "true" : "false")
-            NSLog("NotchLock[interactive] background clickable off-bead: %@", offBead ? "NO" : "YES")
+            // Move onto the bead and check IMMEDIATELY (before the dwell).
+            self.handleMove(beadG)
+            let immediate = c.readyToGrab
+            NSLog("NotchLock[dwell] immediately-over-bead readyToGrab=%@ (want false)", immediate ? "true" : "false")
+            // Wait past the dwell, then simulate a continued hover event over the
+            // bead (macOS delivers continuous mouseMoved) → should become grabbable.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
+                self.handleMove(beadG)          // still hovering, dwell now elapsed
+                let afterDwell = c.readyToGrab
+                NSLog("NotchLock[dwell] after-dwell readyToGrab=%@ (want true)", afterDwell ? "true" : "false")
+                // Move well away → click-through again.
+                let away = CGPoint(x: beadG.x + 260, y: beadG.y - 200)
+                self.handleMove(away)
+                let offBead = c.isInteractive
+                NSLog("NotchLock[dwell] off-bead interactive=%@ (want false) — background clickable: %@",
+                      offBead ? "true" : "false", offBead ? "NO" : "YES")
+            }
         }
     }
 
@@ -119,8 +125,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { [weak self] in
             guard let self, let c = self.controller else { return }
             let bead = c.beadGlobalPosition()
+            // Hover the bead and wait past the grab dwell (as a real user would),
+            // re-issuing a hover event so the overlay becomes grabbable.
             self.handleMove(bead)
-            self.handleLeftDown(bead)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+                self.handleMove(bead)          // dwell elapsed → readyToGrab
+                self.handleLeftDown(bead)
             let depth: CGFloat = 210
             let pullFrames = 26
             let holdFrames = 16
@@ -153,6 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     NSLog("NotchLock[selfdrive] FIRE gesture complete (released while pulled ≈ %.0f pt)", Double(depth))
                 }
             }
+            }   // end of dwell-wait block
         }
     }
 
@@ -186,6 +197,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleLeftDown(_ p: CGPoint) {
         guard let controller else { return }
+        // Only grab once the grab dwell has elapsed (cursor deliberately hovered
+        // the bead). A click before that falls through to the background instead
+        // of getting eaten when the cord swings near the cursor.
+        guard controller.readyToGrab else {
+            if debug { NSLog("NotchLock[debug] leftDown ignored (dwell not met) → passes to background") }
+            return
+        }
         let grabbed = controller.tryGrab(globalPoint: p)
         if debug {
             let bead = controller.beadGlobalPosition()

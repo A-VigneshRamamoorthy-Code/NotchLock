@@ -13,10 +13,19 @@ final class OverlayController {
     private let notchMaxX: CGFloat
     private let activationRefY: CGFloat
 
-    /// Whether the overlay is currently interactive (only while over the bead).
+    /// Whether the overlay is currently interactive (only after the dwell).
     private var interactive = false
     /// Whether we're currently showing a hand cursor (so we can reset it).
     private var showingHand = false
+    /// When the cursor first came to rest over the bead (for the grab dwell).
+    private var beadHoverSince: CFTimeInterval?
+    /// Fires after the dwell to flip interactive even if the cursor is still.
+    private var dwellTimer: DispatchWorkItem?
+    /// How long the cursor must hover the bead before it can grab. Clicks that
+    /// happen within this window fall through to whatever is underneath, so the
+    /// cord swinging under a cursor (or the cursor brushing past) never eats a
+    /// click meant for the background.
+    private let grabDwell: CFTimeInterval = 0.18
 
     init(screen: NSScreen, style: ChainStyle) {
         self.style = style
@@ -62,9 +71,11 @@ final class OverlayController {
         CGPoint(x: global.x - window.frame.minX, y: global.y - window.frame.minY)
     }
 
-    /// Update engagement + the drop position from the cursor's location, and make
-    /// the overlay interactive ONLY while the cursor is over the bead (so it can
-    /// be grabbed) — click-through everywhere else. Also drives the hand cursor.
+    /// Update engagement + the drop position from the cursor's location. The
+    /// overlay only becomes interactive (and shows the hand) after the cursor has
+    /// **hovered the bead continuously for `grabDwell`** — so a click that lands
+    /// before that still reaches the background. Everywhere else stays fully
+    /// click-through.
     func handleMouseMoved(globalPoint p: CGPoint) {
         let v = toView(p)
         chainView.cursorXView = v.x           // drop the cord in line with the pointer
@@ -72,29 +83,69 @@ final class OverlayController {
         let d = hypot(v.x - clampedX, v.y - activationRefY)
         chainView.setEngaged(d < CGFloat(style.activationRadius))
 
-        // Is the cursor over the (visible) bead?
-        let bead = chainView.beadPosition
-        let overBead = chainView.emergenceValue > 0.5
-            && hypot(v.x - bead.x, v.y - bead.y) <= CGFloat(style.grabRadius) + 6
-
-        // Interactive while over the bead OR mid-pull; click-through otherwise.
-        let grabbed = chainView.isGrabbed
-        let wantInteractive = overBead || grabbed
-        if wantInteractive != interactive {
-            interactive = wantInteractive
-            window.ignoresMouseEvents = !wantInteractive
+        // While pulling, always interactive (and closed hand).
+        if chainView.isGrabbed {
+            setInteractive(true)
+            NSCursor.closedHand.set(); showingHand = true
+            return
         }
 
-        // Hand cursor only over the pull; reset once when leaving so it never
-        // sticks over the background (which owns its own cursor when clicked-through).
-        if grabbed {
-            NSCursor.closedHand.set(); showingHand = true
-        } else if overBead {
-            NSCursor.openHand.set(); showingHand = true
-        } else if showingHand {
-            NSCursor.arrow.set(); showingHand = false
+        let overBead = isOverBead(viewPoint: v)
+        let now = CFAbsoluteTimeGetCurrent()
+        if overBead {
+            if beadHoverSince == nil {
+                beadHoverSince = now
+                scheduleDwell()               // covers the stationary-cursor case
+            }
+            if now - (beadHoverSince ?? now) >= grabDwell {
+                setInteractive(true)
+                NSCursor.openHand.set(); showingHand = true
+            }
+            // else: still within the dwell window → stay click-through.
+        } else {
+            resetHover()
         }
     }
+
+    private func isOverBead(viewPoint v: CGPoint) -> Bool {
+        guard chainView.emergenceValue > 0.5 else { return false }
+        let bead = chainView.beadPosition
+        return hypot(v.x - bead.x, v.y - bead.y) <= CGFloat(style.grabRadius) + 6
+    }
+
+    /// Recomputes over-the-bead from the *live* cursor position (used by the dwell
+    /// timer, since the bead may have moved while the cursor stayed still).
+    private func cursorIsOverBead() -> Bool {
+        isOverBead(viewPoint: toView(NSEvent.mouseLocation))
+    }
+
+    private func scheduleDwell() {
+        dwellTimer?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.chainView.isGrabbed, self.cursorIsOverBead() else { return }
+            self.setInteractive(true)
+            NSCursor.openHand.set(); self.showingHand = true
+        }
+        dwellTimer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + grabDwell + 0.01, execute: work)
+    }
+
+    private func resetHover() {
+        beadHoverSince = nil
+        dwellTimer?.cancel(); dwellTimer = nil
+        setInteractive(false)
+        if showingHand { NSCursor.arrow.set(); showingHand = false }
+    }
+
+    private func setInteractive(_ value: Bool) {
+        guard value != interactive else { return }
+        interactive = value
+        window.ignoresMouseEvents = !value
+    }
+
+    /// True only once the grab dwell has elapsed — the app gates grabs on this so
+    /// an immediate click over a just-arrived bead goes to the background instead.
+    var readyToGrab: Bool { interactive }
 
     /// Exposed for tests: true when the overlay currently captures clicks.
     var isInteractive: Bool { !window.ignoresMouseEvents }
