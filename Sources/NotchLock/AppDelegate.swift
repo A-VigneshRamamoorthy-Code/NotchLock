@@ -4,7 +4,9 @@ import NotchLockCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: OverlayController?
     private let tracker = MouseTracker()
-    private let style = ChainStyle.standard
+    private var cordStyle: CordStyle = .brass
+    private var style: ChainStyle { cordStyle.style }
+    private let defaultsKey = "NotchLock.cordStyle"
 
     private var dragging = false
     private var lockPending = false
@@ -27,6 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         NSApp.setActivationPolicy(.accessory)   // no Dock icon, no app menu
+
+        // Restore the chosen cord look.
+        if let raw = UserDefaults.standard.string(forKey: defaultsKey),
+           let s = CordStyle(rawValue: raw) { cordStyle = s }
 
         // Survive reboots: install/repair the RunAtLoad LaunchAgent.
         LoginItem.synchronize()
@@ -200,6 +206,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(hint)
         menu.addItem(.separator())
 
+        // Style picker (like NotchPaw — pick your cord under the notch).
+        let styleHeader = NSMenuItem(title: "Style", action: nil, keyEquivalent: "")
+        styleHeader.isEnabled = false
+        styleHeader.attributedTitle = NSAttributedString(string: "Cord style", attributes: [
+            .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ])
+        menu.addItem(styleHeader)
+
+        let iconSize = NSSize(width: 26, height: 34)
+        for s in CordStyle.allCases {
+            let item = NSMenuItem(title: s.displayName, action: #selector(selectStyle(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = s.rawValue
+            item.attributedTitle = styleTitle(for: s)
+            item.state = (s == cordStyle) ? .on : .off
+            if let cg = ChainRenderer.icon(for: s.style, size: CGSize(width: iconSize.width, height: iconSize.height)) {
+                item.image = NSImage(cgImage: cg, size: iconSize)
+            }
+            menu.addItem(item)
+        }
+
+        menu.addItem(.separator())
+
         let lockNow = NSMenuItem(title: "Lock Screen Now", action: #selector(lockNow), keyEquivalent: "l")
         lockNow.target = self
         menu.addItem(lockNow)
@@ -214,6 +244,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quit.target = self
         menu.addItem(quit)
         return menu
+    }
+
+    /// Two-line styled menu title: bold name over a smaller grey tagline.
+    private func styleTitle(for s: CordStyle) -> NSAttributedString {
+        let str = NSMutableAttributedString(string: s.displayName, attributes: [
+            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+            .foregroundColor: NSColor.labelColor,
+        ])
+        str.append(NSAttributedString(string: "\n" + s.tagline, attributes: [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ]))
+        return str
+    }
+
+    @objc private func selectStyle(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let s = CordStyle(rawValue: raw) else { return }
+        cordStyle = s
+        controller?.updateStyle(s.style)
+        UserDefaults.standard.set(s.rawValue, forKey: defaultsKey)
+        LockController.playSound("Tink")
     }
 
     @objc private func lockNow() {

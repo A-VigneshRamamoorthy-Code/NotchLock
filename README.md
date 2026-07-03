@@ -22,7 +22,7 @@ satisfying click.**
 
 <img src="assets/notchlock-demo.gif" width="760" alt="NotchLock demo — a cord drops from the notch, you pull it, and the Mac locks" />
 
-<sub>▶ <a href="assets/notchlock-demo.mp4"><b>Watch the HD video</b></a> · every pixel is drawn by the app's own engine</sub>
+<sub>▶ <a href="assets/notchlock-demo.mp4"><b>Watch the HD video</b></a> · reveal on approach · right‑click to switch styles · pull the thick rope to lock</sub>
 
 </div>
 
@@ -75,17 +75,40 @@ sound. Lights out. 🌙
 
 ---
 
+## 🎨 Choose your cord
+
+**Right‑click under the notch** to pick a look — just like NotchPaw. Your choice is
+remembered across launches, and every cord swings with its own **playful, springy**
+personality.
+
+<div align="center">
+<img src="assets/styles.png" width="820" alt="NotchLock cord styles: Brass Bead, Thick Rope, Ball Chain, Neon Cord" />
+</div>
+
+| Style | Vibe |
+|-------|------|
+| 🔔 **Brass Bead** | The classic — a thin brass cord with an amber pull‑bead. |
+| 🪢 **Thick Rope** | A chunky twisted‑jute rope with a wooden ring handle. Hefty and tactile. |
+| ⛓️ **Ball Chain** | A real metal lamp pull‑chain of little beads with an end knob. |
+| 💡 **Neon Cord** | A glowing, extra‑bouncy cord with a luminous orb. |
+
+The cord **peeks out the moment your cursor gets close to the notch**, sways gently
+while it's out, and tucks away (back to **0 % CPU**) when you leave.
+
+---
+
 ## 🧩 Features
 
 |  |  |
 |---|---|
-| 🪝 **Lamp‑cord physics** | A pinned Verlet rope drops, hangs and swings under real gravity — grab, stretch, release, recoil. |
+| 🎨 **Four cord styles** | Brass bead, **thick rope**, ball chain, neon — switch anytime from the right‑click menu; your pick is remembered. |
+| 🪝 **Lamp‑cord physics** | A pinned Verlet rope drops, hangs and swings under real gravity — grab, stretch, release, recoil, with a playful ambient sway. |
 | 🔒 **Pull to lock** | Pull past the threshold and NotchLock locks your screen (via the same call as macOS *Lock Screen*), with grab + lock sounds. |
 | 🫥 **Truly invisible** | Agent app: **no Dock icon, no status‑bar icon**. A fully click‑through overlay — it never blocks a single click underneath. |
-| 🪫 **0 % idle CPU** | The animation loop sleeps the instant the cord is still. Nothing moving, nothing burning. |
+| 🪫 **0 % idle CPU** | The animation loop sleeps the instant the cord is tucked away. Nothing moving, nothing burning. |
 | 🔁 **Survives reboot** | Registers a `RunAtLoad` LaunchAgent (self‑healing) so it's back after every restart or login. |
 | 🖱️ **Zero permissions** | Uses global event monitors — no Accessibility or Screen‑Recording grants required. |
-| 🎨 **Drawn in code** | Cord, bead, icon — all CoreGraphics. No asset files, ~600 KB app. |
+| 🎨 **Drawn in code** | Cord, bead, ring, icon — all CoreGraphics. No asset files, ~600 KB app. |
 | 🛠️ **No Xcode** | Pure SwiftPM. Builds with the Command Line Tools and hand‑assembles the `.app`. |
 
 ---
@@ -124,6 +147,7 @@ Preview the art & motion headlessly — no GUI, no Screen‑Recording permission
 ```bash
 swift run NotchLock --render  /tmp/pose      # hanging + armed poses
 swift run NotchLock --contact /tmp/contact   # pull → release → swing contact sheet
+swift run NotchLock --styles  /tmp/styles.png # all four cord looks, side by side
 swift run NotchLock --demo    /tmp/demo      # the full product demo (mp4 + frames)
 swift run NotchLock --appicon /tmp/icon.png  # the app icon
 ```
@@ -148,10 +172,10 @@ Sources/
   NotchLockCore/           # PURE (no AppKit): testable + every pixel drawn here
     NotchGeometry.swift      #   notch rect + anchor from NSScreen data
     Spring.swift             #   damped spring (reveal / tuck)
-    ChainStyle.swift         #   all the tuning + palette
+    ChainStyle.swift         #   the four cord looks (brass/rope/ball-chain/neon) + tuning
     ChainEngine.swift        #   Verlet pull-cord: drop physics, grab/drag/release,
-                             #     springy stretch, fire-once lock threshold
-    ChainRenderer.swift      #   tapered brass cord + bead + app icon (CoreGraphics)
+                             #     springy stretch, playful sway, fire-once lock threshold
+    ChainRenderer.swift      #   per-look cord + handle + app icon (CoreGraphics)
   NotchLock/               # AppKit shell
     main.swift               #   entry (+ hidden --render/--contact/--demo/--appicon)
     AppDelegate.swift        #   monitors, drag state machine, menu, lock sequence

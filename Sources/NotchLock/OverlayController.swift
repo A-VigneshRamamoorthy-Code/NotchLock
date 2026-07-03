@@ -8,7 +8,7 @@ final class OverlayController {
     let window: OverlayWindow
     let chainView: ChainView
     private(set) var geometry: NotchGeometry
-    private let style: ChainStyle
+    private var style: ChainStyle
     private let notchMinX: CGFloat
     private let notchMaxX: CGFloat
     private let activationRefY: CGFloat
@@ -42,6 +42,13 @@ final class OverlayController {
 
     func show() { window.orderFrontRegardless() }
     func close() { window.orderOut(nil); window.close() }
+
+    /// Live-swap the cord visual.
+    func updateStyle(_ newStyle: ChainStyle) {
+        style = newStyle
+        chainView.style = newStyle
+        chainView.resume()
+    }
 
     // MARK: - Cursor mapping
 

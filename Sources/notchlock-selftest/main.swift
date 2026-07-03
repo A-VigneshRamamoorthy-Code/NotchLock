@@ -117,10 +117,14 @@ group("ChainEngine — pull threshold fires once") {
                       Double(deep.beadPosition.y - tipAtRelease.y))
     check(swung > 20, "recoils/swings up after release (Δ=\(swung))")
     check(!deep.isMotionless, "still swinging shortly after release")
+    // Let the big recoil damp out (still engaged): the bead returns to ~rest drop
+    // (a little ambient sway remains, so allow a looser tolerance on the vertical).
     run(&deep, engaged: true, seconds: 4.0)
-    check(deep.isMotionless, "settles after swinging")
     let backDrop = Double(shoulder.y - deep.beadPosition.y)
-    check(approx(backDrop, style.restLength, 12), "returns to the rest position (drop=\(backDrop))")
+    check(approx(backDrop, style.restLength, 26), "returns near the rest position (drop=\(Int(backDrop)))")
+    // Once tucked away, the sway stops and it settles motionless (0% CPU).
+    run(&deep, engaged: false, seconds: 3.5)
+    check(deep.isMotionless, "settles motionless once tucked")
 
     // A shallow pull does NOT fire.
     var shallow = makeEngine()
@@ -155,6 +159,61 @@ group("ChainRenderer") {
     check(icon != nil && (icon?.width ?? 0) > 0, "menu icon renders with pixels")
     let app = ChainRenderer.appIcon(pt: 256, scale: 1)
     check(app != nil && app?.width == 256, "app icon renders at 256px")
+}
+
+group("CordStyle set") {
+    check(CordStyle.allCases.count == 4, "four cord styles")
+    check(CordStyle.allCases.contains(.rope), "thick rope is one of the options")
+    for s in CordStyle.allCases {
+        let st = s.style
+        check(st.id == s.rawValue, "\(s.rawValue) id round-trips")
+        check(CordStyle(rawValue: s.rawValue) == s, "\(s.rawValue) raw round-trips")
+        check(st.segments >= 2 && st.restLength > 0 && st.maxReach > st.restLength, "\(s.rawValue) sane geometry")
+        check(st.activationRadius >= st.restLength, "\(s.rawValue) reveal radius >= drop")
+        check(st.grabRadius > 0 && st.pullThreshold > 0, "\(s.rawValue) grab/threshold > 0")
+        check(!s.displayName.isEmpty && !s.tagline.isEmpty && !s.emoji.isEmpty, "\(s.rawValue) has labels")
+        check(st.swayAmp > 0, "\(s.rawValue) has playful sway")
+    }
+    check(CordStyle.rope.style.cordBaseWidth > CordStyle.brass.style.cordBaseWidth, "rope is thicker than brass")
+    check(ChainStyle.standard.look == .brass, "default look is brass")
+}
+
+group("Per-style physics + rendering") {
+    for s in CordStyle.allCases {
+        let st = s.style
+        var e = ChainEngine(shoulder: shoulder, style: st)
+        run(&e, engaged: true, seconds: 1.5)
+        check(Double(e.state.emergence) > 0.9, "\(s.rawValue) drops out when engaged")
+        let drop = Double(shoulder.y - e.beadPosition.y)
+        check(drop > st.restLength * 0.8, "\(s.rawValue) hangs down (drop=\(Int(drop)))")
+        // grab / deep pull / release fires once
+        check(e.grab(at: e.beadPosition), "\(s.rawValue) grabbable")
+        let deepY = shoulder.y - CGFloat(st.restLength + st.pullThreshold + 30)
+        for _ in 0..<60 { e.drag(to: CGPoint(x: shoulder.x, y: deepY)); e.update(dt: dt, engaged: true) }
+        let reach = hypot(Double(e.beadPosition.x - shoulder.x), Double(e.beadPosition.y - shoulder.y))
+        check(reach <= st.maxReach + 3, "\(s.rawValue) pull clamped to maxReach (\(Int(reach)))")
+        check(e.release() == true, "\(s.rawValue) deep pull fires the lock")
+        check(!e.beadPosition.x.isNaN, "\(s.rawValue) finite")
+        // renderer
+        let b = ChainRenderer.bounds(of: e.state, style: st)
+        check(b.width > 0 && !b.width.isNaN, "\(s.rawValue) bounds finite")
+        let icon = ChainRenderer.icon(for: st, size: CGSize(width: 26, height: 34))
+        check(icon != nil && (icon?.width ?? 0) > 0, "\(s.rawValue) menu icon renders")
+    }
+}
+
+group("Playful ambient sway") {
+    // With the cord out (engaged) and a still cursor, it keeps swaying → different
+    // tip positions a fraction of a second apart (alive), and never NaNs.
+    var e = ChainEngine(shoulder: shoulder, style: CordStyle.neon.style)
+    run(&e, engaged: true, seconds: 1.2)
+    let t1 = e.beadPosition
+    run(&e, engaged: true, seconds: 0.4)
+    let t2 = e.beadPosition
+    check(hypot(Double(t1.x - t2.x), Double(t1.y - t2.y)) > 1.0, "cord sways playfully while out")
+    // Once tucked away, it settles → motionless (0% CPU invariant preserved).
+    run(&e, engaged: false, seconds: 3.0)
+    check(e.isMotionless, "settles motionless once tucked (sway stops)")
 }
 
 print("\n\(checks - failures)/\(checks) checks passed.")

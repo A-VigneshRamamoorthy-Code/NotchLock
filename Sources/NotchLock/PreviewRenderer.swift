@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -91,6 +92,31 @@ enum PreviewRenderer {
         return ok
     }
 
+    // A showcase strip of every cord look (hanging), for the README.
+    static func renderStyles(to path: String) -> Bool {
+        let styles = CordStyle.allCases
+        let cw = cell.width, ch = cell.height
+        let sheet = CGSize(width: cw * CGFloat(styles.count), height: ch)
+        guard let ctx = makeContext(size: sheet) else { return false }
+        for (i, s) in styles.enumerated() {
+            let shoulder = CGPoint(x: cw / 2, y: ch + 16)
+            var e = ChainEngine(shoulder: shoulder, style: s.style)
+            // let it drop + sway a touch for character
+            for _ in 0..<Int(1.6 * 60) { e.update(dt: 1.0 / 60.0, engaged: true) }
+            ctx.saveGState()
+            ctx.translateBy(x: CGFloat(i) * cw, y: 0)
+            drawScene(ctx, engine: e, label: s.displayName)
+            ctx.restoreGState()
+        }
+        guard let image = ctx.makeImage() else { return false }
+        let url = URL(fileURLWithPath: path)
+        guard let dest = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else { return false }
+        CGImageDestinationAddImage(dest, image, nil)
+        let ok = CGImageDestinationFinalize(dest)
+        if ok { FileHandle.standardOutput.write("rendered \(url.path)\n".data(using: .utf8)!) }
+        return ok
+    }
+
     // MARK: - Helpers
 
     private static func renderPose(_ engine: ChainEngine, name: String, to dir: String) {
@@ -99,17 +125,34 @@ enum PreviewRenderer {
         save(ctx, to: dir, name: name)
     }
 
-    private static func drawScene(_ ctx: CGContext, engine: ChainEngine) {
+    private static func drawScene(_ ctx: CGContext, engine: ChainEngine, label: String? = nil) {
         ctx.saveGState()
         ctx.clip(to: CGRect(origin: .zero, size: cell))   // emulate the top-edge clip
-        ctx.setFillColor(CGColor(srgbRed: 0.11, green: 0.11, blue: 0.13, alpha: 1))
-        ctx.fill(CGRect(origin: .zero, size: cell))
+        // Soft gradient backdrop.
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        if let g = CGGradient(colorsSpace: space,
+                              colors: [CGColor(srgbRed: 0.14, green: 0.15, blue: 0.20, alpha: 1),
+                                       CGColor(srgbRed: 0.09, green: 0.09, blue: 0.12, alpha: 1)] as CFArray,
+                              locations: [0, 1]) {
+            ctx.drawLinearGradient(g, start: CGPoint(x: 0, y: cell.height), end: CGPoint(x: 0, y: 0), options: [])
+        }
         ChainRenderer.draw(in: ctx, state: engine.state, style: engine.style)
         // Notch nub at the top centre (the cord passes behind it).
         ctx.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
         let notch = CGPath(roundedRect: CGRect(x: cell.width / 2 - 70, y: cell.height - 20, width: 140, height: 28),
                            cornerWidth: 10, cornerHeight: 10, transform: nil)
         ctx.addPath(notch); ctx.fillPath()
+        if let label {
+            let a = NSAttributedString(string: label, attributes: [
+                .font: NSFont.systemFont(ofSize: 16, weight: .semibold),
+                .foregroundColor: NSColor(white: 0.96, alpha: 0.95),
+            ])
+            let w = a.size().width
+            let g = NSGraphicsContext(cgContext: ctx, flipped: false)
+            NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = g
+            a.draw(at: CGPoint(x: cell.width / 2 - w / 2, y: 24))
+            NSGraphicsContext.restoreGraphicsState()
+        }
         ctx.restoreGState()
     }
 

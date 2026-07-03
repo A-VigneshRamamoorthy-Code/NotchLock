@@ -143,14 +143,19 @@ public struct ChainEngine {
         time += h
         let n = segCount
 
-        // --- Emergence (critically damped drop in / tuck out of the notch) ---
+        // --- Emergence (a lively, slightly springy pop in / tuck out) ---
         let emTarget: Double = (grabbed || engaged) ? 1 : 0
-        let emForce = 150.0 * (emTarget - emergence) - 24.0 * emergenceVel
+        let emForce = 190.0 * (emTarget - emergence) - 19.0 * emergenceVel
         emergenceVel += emForce * h
         emergence = min(1, max(0, emergence + emergenceVel * h))
         state.emergence = CGFloat(emergence)
 
         let eff = effectiveShoulder(emergence)
+
+        // Playful ambient sway: a gentle horizontal breeze that grows with how
+        // far the cord is out (0 when tucked ⇒ stays motionless ⇒ 0% CPU).
+        let sway = grabbed ? 0.0
+            : style.swayAmp * emergence * (0.75 * sin(time * 2.3) + 0.25 * sin(time * 3.9 + 0.6))
 
         // Clamp the hand target to maxReach so a wild target can't fling the tip.
         var effTarget = tipTarget
@@ -197,7 +202,9 @@ public struct ChainEngine {
                 ny += vy * damp + ay * h * h
             } else {
                 // Free rope: inertia + gravity → hangs straight and swings.
-                nx += vx * style.chainDamping
+                // Ambient sway grows toward the tip so it swings like a pendulum.
+                let depth = Double(i) / Double(n - 1)
+                nx += vx * style.chainDamping + sway * depth * h * h
                 ny += vy * style.chainDamping - grav * h * h
             }
             nodes[i] = CGPoint(x: nx, y: ny)
