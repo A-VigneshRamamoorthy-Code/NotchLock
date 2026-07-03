@@ -17,6 +17,7 @@ satisfying click.**
 ![Idle CPU](https://img.shields.io/badge/idle%20CPU-0%25-brightgreen)
 ![Dock icon](https://img.shields.io/badge/Dock%20icon-none-lightgrey)
 ![Size](https://img.shields.io/badge/download-~600%20KB-success)
+[![Release](https://img.shields.io/github/v/release/A-VigneshRamamoorthy-Code/NotchLock?label=release&color=8A2BE2)](https://github.com/A-VigneshRamamoorthy-Code/NotchLock/releases/latest)
 
 <br/>
 
@@ -115,7 +116,7 @@ while it's out, and tucks away (back to **0 % CPU**) when you leave.
 
 ## 📥 Install
 
-1. Download **[`NotchLock.dmg`](NotchLock.dmg)**.
+1. Download **[`NotchLock.dmg`](https://github.com/A-VigneshRamamoorthy-Code/NotchLock/releases/latest/download/NotchLock.dmg)** from the [latest release](https://github.com/A-VigneshRamamoorthy-Code/NotchLock/releases/latest).
 2. Drag **NotchLock** onto **Applications**.
 3. Launch it. It's ad‑hoc signed (not notarized), so the first time
    **right‑click → Open** and confirm.
