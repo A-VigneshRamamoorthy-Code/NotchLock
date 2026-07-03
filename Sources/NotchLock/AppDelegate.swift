@@ -247,34 +247,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        let header = NSMenuItem(title: "NotchLock", action: nil, keyEquivalent: "")
-        header.isEnabled = false
-        header.attributedTitle = NSAttributedString(string: "NotchLock", attributes: [
-            .font: NSFont.systemFont(ofSize: 13, weight: .bold),
-            .foregroundColor: NSColor.labelColor,
-        ])
-        if let cg = ChainRenderer.icon(for: style, size: CGSize(width: 22, height: 30)) {
-            header.image = NSImage(cgImage: cg, size: NSSize(width: 22, height: 30))
-        }
+        // Branded header (custom view → never greyed out).
+        let header = NSMenuItem()
+        header.view = MenuHeaderView(style: style, subtitle: "Pull the cord to lock your screen")
         menu.addItem(header)
-
-        let hint = NSMenuItem(title: "Pull the cord to lock", action: nil, keyEquivalent: "")
-        hint.isEnabled = false
-        hint.attributedTitle = NSAttributedString(string: "Pull the cord to lock the screen", attributes: [
-            .font: NSFont.systemFont(ofSize: 11),
-            .foregroundColor: NSColor.secondaryLabelColor,
-        ])
-        menu.addItem(hint)
         menu.addItem(.separator())
 
-        // Style picker (like NotchPaw — pick your cord under the notch).
-        let styleHeader = NSMenuItem(title: "Style", action: nil, keyEquivalent: "")
-        styleHeader.isEnabled = false
-        styleHeader.attributedTitle = NSAttributedString(string: "Cord style", attributes: [
-            .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-            .foregroundColor: NSColor.secondaryLabelColor,
-        ])
-        menu.addItem(styleHeader)
+        // Native, crisp section header (not a dimmed disabled item).
+        menu.addItem(sectionHeader("CORD STYLE"))
 
         let iconSize = NSSize(width: 26, height: 34)
         for s in CordStyle.allCases {
@@ -305,6 +285,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quit.target = self
         menu.addItem(quit)
         return menu
+    }
+
+    /// A native section header if available (macOS 14+), else a tidy fallback.
+    private func sectionHeader(_ title: String) -> NSMenuItem {
+        if #available(macOS 14.0, *) {
+            return NSMenuItem.sectionHeader(title: title)
+        }
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        return item
     }
 
     /// Two-line styled menu title: bold name over a smaller grey tagline.

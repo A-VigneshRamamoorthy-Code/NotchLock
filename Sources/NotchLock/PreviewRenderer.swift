@@ -119,6 +119,101 @@ enum PreviewRenderer {
 
     // MARK: - Helpers
 
+    /// Render a faithful mockup of the right-click menu (real MenuHeaderView +
+    /// section header + style rows) so the header styling can be eyeballed.
+    static func renderMenu(to path: String, dark: Bool) -> Bool {
+        let scale: CGFloat = 2
+        let W = 300, rowH = 46
+        let styles = CordStyle.allCases
+        let extras = ["Lock Screen Now", "Launch at Login", "Quit NotchLock"]
+        let H = 56 + 10 + 24 + styles.count * rowH + 10 + extras.count * 34 + 24
+        guard let ctx = CGContext(data: nil, width: W * Int(scale), height: H * Int(scale),
+                                  bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+        ctx.scaleBy(x: scale, y: scale)
+        let ns = NSGraphicsContext(cgContext: ctx, flipped: false)
+        NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = ns
+        NSAppearance.current = NSAppearance(named: dark ? .darkAqua : .aqua)
+
+        // Menu panel background (rounded, material-ish).
+        let bg = dark ? NSColor(white: 0.16, alpha: 1) : NSColor(white: 0.97, alpha: 1)
+        let panel = NSBezierPath(roundedRect: NSRect(x: 6, y: 6, width: W - 12, height: H - 12),
+                                 xRadius: 12, yRadius: 12)
+        bg.setFill(); panel.fill()
+
+        var y = CGFloat(H) - 6 - 56    // top-down layout
+
+        // Header content drawn the same way MenuHeaderView lays it out (the real
+        // view is transparent, so the menu material shows behind it).
+        let hx: CGFloat = 16
+        if let cg = ChainRenderer.icon(for: ChainStyle.standard, size: CGSize(width: 26, height: 34)) {
+            NSImage(cgImage: cg, size: NSSize(width: 26, height: 34))
+                .draw(in: NSRect(x: hx, y: y + (56 - 34) / 2, width: 26, height: 34))
+        }
+        let htx = hx + 26 + 12
+        drawLabel("NotchLock", x: htx, y: y + 28, size: 15, weight: .bold, color: dark ? .white : .black)
+        drawLabel("Pull the cord to lock your screen", x: htx, y: y + 9, size: 11.5, weight: .regular,
+                  color: dark ? NSColor(white: 1, alpha: 0.55) : NSColor(white: 0, alpha: 0.55))
+        y -= 12
+        drawSeparator(y: y + 6, W: W, dark: dark); y -= 10
+
+        // Section header.
+        drawLabel("CORD STYLE", x: 20, y: y, size: 11, weight: .semibold,
+                  color: dark ? NSColor(white: 1, alpha: 0.5) : NSColor(white: 0, alpha: 0.5))
+        y -= 24
+
+        for s in styles {
+            let rowRect = NSRect(x: 8, y: y - CGFloat(rowH) + 8, width: CGFloat(W - 16), height: CGFloat(rowH) - 6)
+            if s == .rope {   // show one highlighted (selected) row
+                (dark ? NSColor(calibratedRed: 0.30, green: 0.45, blue: 0.95, alpha: 0.9)
+                      : NSColor(calibratedRed: 0.20, green: 0.42, blue: 0.95, alpha: 0.95)).setFill()
+                NSBezierPath(roundedRect: rowRect, xRadius: 7, yRadius: 7).fill()
+            }
+            if let cg = ChainRenderer.icon(for: s.style, size: CGSize(width: 26, height: 34)) {
+                NSImage(cgImage: cg, size: NSSize(width: 26, height: 34))
+                    .draw(in: NSRect(x: 18, y: y - 30, width: 26, height: 34))
+            }
+            let hi = (s == .rope)
+            drawLabel(s.displayName, x: 52, y: y - 16, size: 13, weight: .semibold,
+                      color: hi ? .white : (dark ? .white : .black))
+            drawLabel(s.tagline, x: 52, y: y - 32, size: 10.5, weight: .regular,
+                      color: hi ? NSColor(white: 1, alpha: 0.85) : (dark ? NSColor(white: 1, alpha: 0.5) : NSColor(white: 0, alpha: 0.5)))
+            if s == .rope {
+                drawLabel("✓", x: CGFloat(W) - 30, y: y - 24, size: 14, weight: .bold, color: .white)
+            }
+            y -= CGFloat(rowH)
+        }
+
+        y -= 4; drawSeparator(y: y + 8, W: W, dark: dark); y -= 8
+        for e in extras {
+            drawLabel(e, x: 20, y: y - 22, size: 13, weight: .regular, color: dark ? .white : .black)
+            y -= 34
+        }
+
+        NSGraphicsContext.restoreGraphicsState()
+        guard let image = ctx.makeImage() else { return false }
+        let url = URL(fileURLWithPath: path)
+        guard let dest = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else { return false }
+        CGImageDestinationAddImage(dest, image, nil)
+        let ok = CGImageDestinationFinalize(dest)
+        if ok { FileHandle.standardOutput.write("rendered \(url.path)\n".data(using: .utf8)!) }
+        return ok
+    }
+
+    private static func drawSeparator(y: CGFloat, W: Int, dark: Bool) {
+        (dark ? NSColor(white: 1, alpha: 0.12) : NSColor(white: 0, alpha: 0.12)).setFill()
+        NSRect(x: 14, y: y, width: CGFloat(W - 28), height: 1).fill()
+    }
+
+    private static func drawLabel(_ s: String, x: CGFloat, y: CGFloat, size: CGFloat,
+                                  weight: NSFont.Weight, color: NSColor) {
+        NSAttributedString(string: s, attributes: [
+            .font: NSFont.systemFont(ofSize: size, weight: weight), .foregroundColor: color,
+        ]).draw(at: NSPoint(x: x, y: y))
+    }
+
+
     private static func renderPose(_ engine: ChainEngine, name: String, to dir: String) {
         guard let ctx = makeContext(size: cell) else { return }
         drawScene(ctx, engine: engine)

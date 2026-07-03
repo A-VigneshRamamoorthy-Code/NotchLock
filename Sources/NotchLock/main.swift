@@ -34,6 +34,13 @@ if let idx = CommandLine.arguments.firstIndex(of: "--demo") {
     DemoRecorder.record(to: outDir)
     exit(0)
 }
+if let idx = CommandLine.arguments.firstIndex(of: "--menushot") {
+    let base = CommandLine.arguments.indices.contains(idx + 1)
+        ? CommandLine.arguments[idx + 1] : NSTemporaryDirectory() + "notchlock-menu"
+    let ok1 = PreviewRenderer.renderMenu(to: base + "-light.png", dark: false)
+    let ok2 = PreviewRenderer.renderMenu(to: base + "-dark.png", dark: true)
+    exit(ok1 && ok2 ? 0 : 1)
+}
 
 let delegate = AppDelegate()
 app.delegate = delegate

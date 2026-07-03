@@ -84,6 +84,8 @@ personality.
 
 <div align="center">
 <img src="assets/styles.png" width="820" alt="NotchLock cord styles: Brass Bead, Thick Rope, Ball Chain, Neon Cord" />
+<br/>
+<img src="assets/menu.png" width="300" alt="NotchLock right-click menu with the cord style picker" />
 </div>
 
 | Style | Vibe |
