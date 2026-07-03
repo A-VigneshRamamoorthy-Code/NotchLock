@@ -1,0 +1,106 @@
+import AppKit
+import NotchLockCore
+
+/// Owns the overlay window + cord view and maps the global cursor into the
+/// cord's coordinate space. The cord hangs from a fixed point (the notch
+/// centre) like a real lamp pull.
+final class OverlayController {
+    let window: OverlayWindow
+    let chainView: ChainView
+    private(set) var geometry: NotchGeometry
+    private let style: ChainStyle
+    private let notchMinX: CGFloat
+    private let notchMaxX: CGFloat
+    private let activationRefY: CGFloat
+
+    init(screen: NSScreen, style: ChainStyle) {
+        self.style = style
+        let geo = OverlayController.computeGeometry(for: screen)
+        self.geometry = geo
+        let frame = OverlayController.windowFrame(for: screen, geometry: geo)
+        self.window = OverlayWindow(contentRect: frame)
+
+        // Notch span (view coords), slightly inset — used for activation distance.
+        let inset: CGFloat = 12
+        var minX = geo.notchRect.minX - frame.minX + inset
+        var maxX = geo.notchRect.maxX - frame.minX - inset
+        if maxX - minX < 24 {
+            let mid = geo.shoulder.x - frame.minX
+            minX = mid - 30; maxX = mid + 30
+        }
+        self.notchMinX = minX
+        self.notchMaxX = maxX
+        self.activationRefY = geo.shoulder.y - frame.minY
+
+        // Hang from the notch centre, anchored just above the visible top edge so
+        // the cord is clipped flush where it enters the notch.
+        let shoulder = CGPoint(x: (minX + maxX) / 2, y: frame.height + 16)
+        self.chainView = ChainView(frame: NSRect(origin: .zero, size: frame.size),
+                                   shoulder: shoulder, style: style)
+        window.contentView = chainView
+    }
+
+    func show() { window.orderFrontRegardless() }
+    func close() { window.orderOut(nil); window.close() }
+
+    // MARK: - Cursor mapping
+
+    private func toView(_ global: CGPoint) -> CGPoint {
+        CGPoint(x: global.x - window.frame.minX, y: global.y - window.frame.minY)
+    }
+
+    /// Update engagement from the cursor's proximity to the notch span.
+    func handleMouseMoved(globalPoint p: CGPoint) {
+        let v = toView(p)
+        let clampedX = min(max(v.x, notchMinX), notchMaxX)
+        let d = hypot(v.x - clampedX, v.y - activationRefY)
+        chainView.setEngaged(d < CGFloat(style.activationRadius))
+    }
+
+    /// Bead position in global screen coords (for hit-testing a grab).
+    func beadGlobalPosition() -> CGPoint {
+        let b = chainView.beadPosition
+        return CGPoint(x: b.x + window.frame.minX, y: b.y + window.frame.minY)
+    }
+
+    @discardableResult
+    func tryGrab(globalPoint p: CGPoint) -> Bool { chainView.tryGrab(at: toView(p)) }
+
+    func drag(globalPoint p: CGPoint) { chainView.drag(to: toView(p)) }
+
+    @discardableResult
+    func release() -> Bool { chainView.release() }
+
+    var isGrabbed: Bool { chainView.isGrabbed }
+
+    // MARK: - Notch hot zone (for the right-click menu + cursor hint)
+
+    func notchHotZone() -> CGRect { geometry.notchRect.insetBy(dx: -14, dy: -12) }
+    func isInNotchHotZone(globalPoint p: CGPoint) -> Bool { notchHotZone().contains(p) }
+
+    /// A larger zone around the hanging cord where a click may be a grab, so we
+    /// only show the grab cursor / try grabs there.
+    func isNearCord(globalPoint p: CGPoint) -> Bool {
+        let bead = beadGlobalPosition()
+        return hypot(p.x - bead.x, p.y - bead.y) < CGFloat(style.grabRadius) + 10
+    }
+
+    // MARK: - Geometry
+
+    static func computeGeometry(for screen: NSScreen) -> NotchGeometry {
+        NotchGeometry.compute(screenFrame: screen.frame,
+                              safeAreaTop: screen.safeAreaInsets.top,
+                              auxLeft: screen.auxiliaryTopLeftArea,
+                              auxRight: screen.auxiliaryTopRightArea)
+    }
+
+    static func windowFrame(for screen: NSScreen, geometry: NotchGeometry) -> NSRect {
+        let f = screen.frame
+        let width = min(f.width, geometry.notchRect.width + 520)
+        let height: CGFloat = 360
+        var x = geometry.shoulder.x - width / 2
+        x = max(f.minX, min(x, f.maxX - width))
+        let y = f.maxY - height
+        return NSRect(x: x, y: y, width: width, height: height)
+    }
+}
